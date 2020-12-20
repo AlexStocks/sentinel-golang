@@ -245,8 +245,8 @@ func Test_generateStatFor(t *testing.T) {
 	})
 }
 
-func Test_buildRulesOfRes(t *testing.T) {
-	t.Run("Test_buildRulesOfRes_no_reuse_stat", func(t *testing.T) {
+func Test_buildResourceTrafficShapingController(t *testing.T) {
+	t.Run("Test_buildResourceTrafficShapingController_no_reuse_stat", func(t *testing.T) {
 		r1 := &Rule{
 			Resource:               "abc1",
 			Threshold:              100,
@@ -263,7 +263,7 @@ func Test_buildRulesOfRes(t *testing.T) {
 			MaxQueueingTimeMs:      10,
 		}
 		assert.True(t, len(tcMap["abc1"]) == 0)
-		tcs := buildRulesOfRes("abc1", []*Rule{r1, r2}, tcMap)
+		tcs := buildResourceTrafficShapingController("abc1", []*Rule{r1, r2}, tcMap)
 		assert.True(t, len(tcs) == 2)
 		assert.True(t, tcs[0].BoundRule() == r1)
 		assert.True(t, tcs[1].BoundRule() == r2)
@@ -271,7 +271,7 @@ func Test_buildRulesOfRes(t *testing.T) {
 		assert.True(t, reflect.DeepEqual(tcs[1].BoundRule(), r2))
 	})
 
-	t.Run("Test_buildRulesOfRes_reuse_stat", func(t *testing.T) {
+	t.Run("Test_buildResourceTrafficShapingController_reuse_stat", func(t *testing.T) {
 		// use nop statistics because of no need statistics
 		r0 := &Rule{
 			Resource:               "abc1",
@@ -413,7 +413,7 @@ func Test_buildRulesOfRes(t *testing.T) {
 			StatIntervalInMs:       50000,
 		}
 
-		tcs := buildRulesOfRes("abc1", []*Rule{r12, r22, r32, r42}, tcMap)
+		tcs := buildResourceTrafficShapingController("abc1", []*Rule{r12, r22, r32, r42}, tcMap)
 		assert.True(t, len(tcs) == 4)
 
 		assert.True(t, tcs[0].BoundRule() == r12)
@@ -455,4 +455,59 @@ func TestLoadRules(t *testing.T) {
 		assert.Nil(t, err)
 		assert.False(t, ok)
 	})
+}
+
+func TestIsValidRule(t *testing.T) {
+	rule1 := Rule{
+		ID:                     "",
+		Resource:               "hello0",
+		TokenCalculateStrategy: 0,
+		ControlBehavior:        0,
+		Threshold:              0,
+		RelationStrategy:       0,
+		RefResource:            "",
+		MaxQueueingTimeMs:      0,
+		WarmUpPeriodSec:        0,
+		WarmUpColdFactor:       0,
+		StatIntervalInMs:       0,
+		AdaptiveEnable:         false,
+		AdaptiveType:           0,
+		SafeThreshold:          2,
+		RiskThreshold:          1,
+		LowWaterMark:           1,
+		HighWaterMark:          2,
+	}
+
+	assert.Nil(t, IsValidRule(&rule1))
+	rule1.AdaptiveEnable = true
+	rule1.LowWaterMark = 1
+	rule1.HighWaterMark = 2
+
+	rule1.AdaptiveType = AdaptiveMax
+	assert.NotNil(t, IsValidRule(&rule1))
+	rule1.AdaptiveType = 0
+	assert.Nil(t, IsValidRule(&rule1))
+
+	rule1.SafeThreshold = 9
+	rule1.RiskThreshold = 9
+	assert.NotNil(t, IsValidRule(&rule1))
+	rule1.SafeThreshold = 10
+	assert.Nil(t, IsValidRule(&rule1))
+
+	rule1.LowWaterMark = 0
+	assert.NotNil(t, IsValidRule(&rule1))
+	rule1.LowWaterMark = 100 * 1024 * 1024
+	rule1.HighWaterMark = 300 * 1024 * 1024
+	assert.Nil(t, IsValidRule(&rule1))
+
+	rule1.HighWaterMark = 0
+	assert.NotNil(t, IsValidRule(&rule1))
+	rule1.HighWaterMark = 300 * 1024 * 1024
+	assert.Nil(t, IsValidRule(&rule1))
+
+	rule1.LowWaterMark = 100 * 1024 * 1024
+	rule1.HighWaterMark = 30 * 1024 * 1024
+	assert.NotNil(t, IsValidRule(&rule1))
+	rule1.HighWaterMark = 300 * 1024 * 1024
+	assert.Nil(t, IsValidRule(&rule1))
 }

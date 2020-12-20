@@ -19,19 +19,20 @@ import (
 )
 
 type DirectTrafficShapingCalculator struct {
-	owner     *TrafficShapingController
-	threshold float64
+	owner *TrafficShapingController
+	// get threshold float64
+	thresholdFunc GetThresholdFunc
 }
 
-func NewDirectTrafficShapingCalculator(owner *TrafficShapingController, threshold float64) *DirectTrafficShapingCalculator {
+func NewDirectTrafficShapingCalculator(owner *TrafficShapingController, f GetThresholdFunc) *DirectTrafficShapingCalculator {
 	return &DirectTrafficShapingCalculator{
-		owner:     owner,
-		threshold: threshold,
+		owner:         owner,
+		thresholdFunc: f,
 	}
 }
 
 func (d *DirectTrafficShapingCalculator) CalculateAllowedTokens(uint32, int32) float64 {
-	return d.threshold
+	return d.thresholdFunc()
 }
 
 func (d *DirectTrafficShapingCalculator) BoundOwner() *TrafficShapingController {

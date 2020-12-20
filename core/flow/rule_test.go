@@ -20,6 +20,14 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestMericType(t *testing.T) {
+	mt1 := Memory
+	mt2 := AdaptiveMax
+
+	assert.True(t, mt1.Validate())
+	assert.False(t, mt2.Validate())
+}
+
 func TestRuleNeedStatistic(t *testing.T) {
 	// need
 	r1 := &Rule{

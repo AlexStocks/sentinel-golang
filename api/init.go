@@ -87,6 +87,9 @@ func initCoreComponents() error {
 	if config.SystemStatCollectIntervalMs() > 0 {
 		system_metric.InitCollector(config.SystemStatCollectIntervalMs())
 	}
+	if config.MemoryStatCollectIntervalMs() > 0 {
+		system_metric.InitMemoryCollector(config.MemoryStatCollectIntervalMs())
+	}
 
 	if config.UseCacheTime() {
 		util.StartTimeTicker()

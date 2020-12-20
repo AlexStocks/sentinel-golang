@@ -220,6 +220,10 @@ func SystemStatCollectIntervalMs() uint32 {
 	return globalCfg.SystemStatCollectIntervalMs()
 }
 
+func MemoryStatCollectIntervalMs() uint32 {
+	return globalCfg.MemoryStatCollectIntervalMs()
+}
+
 func UseCacheTime() bool {
 	return globalCfg.UseCacheTime()
 }
