@@ -15,7 +15,6 @@
 package system_metric
 
 import (
-	"math"
 	"os"
 	"sync"
 	"sync/atomic"
@@ -24,7 +23,6 @@ import (
 	"github.com/alibaba/sentinel-golang/logging"
 	"github.com/alibaba/sentinel-golang/metrics"
 	"github.com/alibaba/sentinel-golang/util"
-	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/load"
 	"github.com/shirou/gopsutil/v3/mem"
 	"github.com/shirou/gopsutil/v3/process"
@@ -41,12 +39,12 @@ var (
 	currentCpuUsage    atomic.Value
 	currentMemoryUsage atomic.Value
 
-	prevCpuStat    *cpu.TimesStat
-	initOnce       sync.Once
+	loadStatOnce   sync.Once
 	memoryStatOnce sync.Once
+	cpuStatOnce    sync.Once
 
-	CurrentPID               = os.Getpid()
-	TotalMemorySize, _, _, _ = getMemoryStat()
+	CurrentPID      = os.Getpid()
+	TotalMemorySize = getTotalMemorySize()
 
 	ssStopChan = make(chan struct{})
 )
@@ -57,72 +55,13 @@ func init() {
 	currentMemoryUsage.Store(NotRetrievedMemoryValue)
 }
 
-func getMemoryStat() (total, used, free uint64, usedPercent float64) {
+// getMemoryStat returns the current machine's memory statistic
+func getTotalMemorySize() (total uint64) {
 	stat, err := mem.VirtualMemory()
 	if err != nil {
-		return 0, 0, 0, 0
+		return 0
 	}
-
-	return stat.Total, stat.Used, stat.Free, stat.UsedPercent
-}
-
-// GetProcessMemoryStat gets current process's memory usage in Bytes
-func GetProcessMemoryStat() (int64, error) {
-	p, err := process.NewProcess(int32(CurrentPID))
-	if err != nil {
-		return 0, err
-	}
-
-	memInfo, err := p.MemoryInfo()
-	var rss int64
-	if memInfo != nil {
-		rss = int64(memInfo.RSS)
-	}
-
-	return rss, err
-}
-
-func InitCollector(intervalMs uint32) {
-	if intervalMs == 0 {
-		return
-	}
-	initOnce.Do(func() {
-		// Initial retrieval.
-		retrieveAndUpdateSystemStat()
-
-		ticker := util.NewTicker(time.Duration(intervalMs) * time.Millisecond)
-		go util.RunWithRecover(func() {
-			for {
-				select {
-				case <-ticker.C():
-					retrieveAndUpdateSystemStat()
-				case <-ssStopChan:
-					ticker.Stop()
-					return
-				}
-			}
-		})
-	})
-}
-
-func retrieveAndUpdateSystemStat() {
-	cpuStats, err := cpu.Times(false)
-	if err != nil {
-		logging.Warn("[retrieveAndUpdateSystemStat] Failed to retrieve current CPU usage", "err", err.Error())
-	}
-	loadStat, err := load.Avg()
-	if err != nil {
-		logging.Warn("[retrieveAndUpdateSystemStat] Failed to retrieve current system load", "err", err.Error())
-	}
-	if len(cpuStats) > 0 {
-		curCpuStat := &cpuStats[0]
-		recordCpuUsage(prevCpuStat, curCpuStat)
-		// Cache the latest CPU stat info.
-		prevCpuStat = curCpuStat
-	}
-	if loadStat != nil {
-		currentLoad.Store(loadStat.Load1)
-	}
+	return stat.Total
 }
 
 func InitMemoryCollector(intervalMs uint32) {
@@ -156,38 +95,94 @@ func retrieveAndUpdateMemoryStat() {
 	}
 }
 
-func recordCpuUsage(prev, curCpuStat *cpu.TimesStat) {
-	if prev != nil && curCpuStat != nil {
-		prevTotal := calculateTotalCpuTick(prev)
-		curTotal := calculateTotalCpuTick(curCpuStat)
+// GetProcessMemoryStat gets current process's memory usage in Bytes
+func GetProcessMemoryStat() (int64, error) {
+	p, err := process.NewProcess(int32(CurrentPID))
+	if err != nil {
+		return 0, err
+	}
 
-		tDiff := curTotal - prevTotal
-		var cpuUsage float64
-		if tDiff == 0 {
-			cpuUsage = 0
-		} else {
-			prevUsed := calculateUserCpuTick(prev) + calculateKernelCpuTick(prev)
-			curUsed := calculateUserCpuTick(curCpuStat) + calculateKernelCpuTick(curCpuStat)
-			cpuUsage = (curUsed - prevUsed) / tDiff
-			cpuUsage = math.Max(0.0, cpuUsage)
-			cpuUsage = math.Min(1.0, cpuUsage)
-		}
-		metrics.SetCPURatio(cpuUsage)
-		currentCpuUsage.Store(cpuUsage)
+	memInfo, err := p.MemoryInfo()
+	var rss int64
+	if memInfo != nil {
+		rss = int64(memInfo.RSS)
+	}
+
+	return rss, err
+}
+
+func InitCpuCollector(intervalMs uint32) {
+	if intervalMs == 0 {
+		return
+	}
+	cpuStatOnce.Do(func() {
+		// Initial memory retrieval.
+		retrieveAndUpdateCpuStat()
+
+		ticker := util.NewTicker(time.Duration(intervalMs) * time.Millisecond)
+		go util.RunWithRecover(func() {
+			for {
+				select {
+				case <-ticker.C():
+					retrieveAndUpdateCpuStat()
+				case <-ssStopChan:
+					ticker.Stop()
+					return
+				}
+			}
+		})
+	})
+}
+
+func retrieveAndUpdateCpuStat() {
+	cpuPercent, err := GetProcessCpuStat()
+	if err == nil {
+		metrics.SetCPURatio(cpuPercent)
+		currentCpuUsage.Store(cpuPercent)
 	}
 }
 
-func calculateTotalCpuTick(stat *cpu.TimesStat) float64 {
-	return stat.User + stat.Nice + stat.System + stat.Idle +
-		stat.Iowait + stat.Irq + stat.Softirq + stat.Steal
+// GetProcessMemoryStat gets current process's memory usage in Bytes
+func GetProcessCpuStat() (float64, error) {
+	p, err := process.NewProcess(int32(CurrentPID))
+	if err != nil {
+		return 0, err
+	}
+	return p.CPUPercent()
 }
 
-func calculateUserCpuTick(stat *cpu.TimesStat) float64 {
-	return stat.User + stat.Nice
+func InitLoadCollector(intervalMs uint32) {
+	if intervalMs == 0 {
+		return
+	}
+	loadStatOnce.Do(func() {
+		// Initial retrieval.
+		retrieveAndUpdateLoadStat()
+
+		ticker := time.NewTicker(time.Duration(intervalMs) * time.Millisecond)
+		go util.RunWithRecover(func() {
+			for {
+				select {
+				case <-ticker.C:
+					retrieveAndUpdateLoadStat()
+				case <-ssStopChan:
+					ticker.Stop()
+					return
+				}
+			}
+		})
+	})
 }
 
-func calculateKernelCpuTick(stat *cpu.TimesStat) float64 {
-	return stat.System + stat.Irq + stat.Softirq
+func retrieveAndUpdateLoadStat() {
+	loadStat, err := load.Avg()
+	if err != nil {
+		logging.Warn("[retrieveAndUpdateSystemStat] Failed to retrieve current system load", "err", err.Error())
+		return
+	}
+	if loadStat != nil {
+		currentLoad.Store(loadStat.Load1)
+	}
 }
 
 func CurrentLoad() float64 {

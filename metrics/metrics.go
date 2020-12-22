@@ -96,6 +96,9 @@ func SetResourceFlowThreshold(resource string, threshold float64) {
 }
 
 func RegisterSentinelMetrics(registry *prometheus.Registry) {
+	if registry == nil {
+		return
+	}
 	registerMetrics.Do(func() {
 		for _, metric := range metrics {
 			registry.MustRegister(metric)
@@ -110,7 +113,9 @@ type resettable interface {
 // Reset all metrics to zero
 func ResetSentinelMetrics() {
 	for _, metric := range metrics {
-		rm := metric.(resettable)
-		rm.Reset()
+		rm, ok := metric.(resettable)
+		if ok {
+			rm.Reset()
+		}
 	}
 }

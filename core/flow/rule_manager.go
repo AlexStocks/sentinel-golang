@@ -33,8 +33,6 @@ import (
 // TrafficControllerGenFunc represents the TrafficShapingController generator function of a specific control behavior.
 type TrafficControllerGenFunc func(*Rule, *standaloneStatistic) (*TrafficShapingController, error)
 
-type GetThresholdFunc func() float64
-
 type trafficControllerGenKey struct {
 	tokenCalculateStrategy TokenCalculateStrategy
 	controlBehavior        ControlBehavior
@@ -73,7 +71,7 @@ func init() {
 		if err != nil || tsc == nil {
 			return nil, err
 		}
-		tsc.flowCalculator = NewDirectTrafficShapingCalculator(tsc, rule.GetThreshold)
+		tsc.flowCalculator = NewDirectTrafficShapingCalculator(tsc, rule.Threshold)
 		tsc.flowChecker = NewRejectTrafficShapingChecker(tsc, rule)
 		return tsc, nil
 	}
@@ -86,7 +84,7 @@ func init() {
 		if err != nil || tsc == nil {
 			return nil, err
 		}
-		tsc.flowCalculator = NewDirectTrafficShapingCalculator(tsc, rule.GetThreshold)
+		tsc.flowCalculator = NewDirectTrafficShapingCalculator(tsc, rule.Threshold)
 		tsc.flowChecker = NewThrottlingChecker(tsc, rule.MaxQueueingTimeMs, rule.StatIntervalInMs)
 		return tsc, nil
 	}
@@ -125,6 +123,38 @@ func init() {
 			return nil, err
 		}
 		tsc.flowCalculator = NewWarmUpTrafficShapingCalculator(tsc, rule)
+		tsc.flowChecker = NewThrottlingChecker(tsc, rule.MaxQueueingTimeMs, rule.StatIntervalInMs)
+		return tsc, nil
+	}
+	tcGenFuncMap[trafficControllerGenKey{
+		tokenCalculateStrategy: AdaptiveMemory,
+		controlBehavior:        Reject,
+	}] = func(rule *Rule, boundStat *standaloneStatistic) (*TrafficShapingController, error) {
+		if boundStat == nil {
+			var err error
+			boundStat, err = generateStatFor(rule)
+			if err != nil {
+				return nil, err
+			}
+		}
+		tsc, err := NewTrafficShapingController(rule, boundStat)
+		if err != nil || tsc == nil {
+			return nil, err
+		}
+		tsc.flowCalculator = NewMemoryAdaptiveTrafficShapingCalculator(tsc, rule)
+		tsc.flowChecker = NewRejectTrafficShapingChecker(tsc, rule)
+		return tsc, nil
+	}
+	tcGenFuncMap[trafficControllerGenKey{
+		tokenCalculateStrategy: AdaptiveMemory,
+		controlBehavior:        Throttling,
+	}] = func(rule *Rule, _ *standaloneStatistic) (*TrafficShapingController, error) {
+		// AdaptiveMemory token calculate strategy and throttling control behavior don't use stat, so we just give a nop stat.
+		tsc, err := NewTrafficShapingController(rule, nopStat)
+		if err != nil || tsc == nil {
+			return nil, err
+		}
+		tsc.flowCalculator = NewMemoryAdaptiveTrafficShapingCalculator(tsc, rule)
 		tsc.flowChecker = NewThrottlingChecker(tsc, rule.MaxQueueingTimeMs, rule.StatIntervalInMs)
 		return tsc, nil
 	}
@@ -516,27 +546,26 @@ func IsValidRule(rule *Rule) error {
 	if rule.StatIntervalInMs > 10*60*1000 {
 		logging.Info("StatIntervalInMs is great than 10 minutes, less than 10 minutes is recommended.")
 	}
-	if rule.AdaptiveEnable {
-		if !rule.AdaptiveType.Validate() {
-			return errors.New("illegal metric type")
+	if rule.TokenCalculateStrategy == AdaptiveMemory {
+		if rule.SafeThreshold <= 0 {
+			return errors.New("rule.SafeThreshold <= 0")
 		}
-
+		if rule.RiskThreshold <= 0 {
+			return errors.New("rule.RiskThreshold <= 0")
+		}
 		if rule.RiskThreshold >= rule.SafeThreshold {
 			return errors.New("rule.RiskThreshold should be less than rule.SafeThreshold")
 		}
 
-		if rule.LowWaterMark == 0 {
-			return errors.New("rule.LowWaterMark should not be 0")
+		if rule.LowWaterMark <= 0 {
+			return errors.New("rule.LowWaterMark <= 0")
 		}
-
-		if rule.HighWaterMark == 0 {
-			return errors.New("rule.HighWaterMark should not be 0")
+		if rule.HighWaterMark <= 0 {
+			return errors.New("rule.HighWaterMark <= 0")
 		}
-
-		if rule.HighWaterMark > system_metric.TotalMemorySize {
+		if rule.HighWaterMark > int64(system_metric.TotalMemorySize) {
 			return errors.New("rule.HighWaterMark should not be greater than current system's total memory size")
 		}
-
 		if rule.LowWaterMark >= rule.HighWaterMark {
 			// can not be equal to defeat from zero overflow
 			return errors.New("rule.LowWaterMark should be less than rule.HighWaterMark")

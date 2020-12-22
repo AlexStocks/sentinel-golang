@@ -220,6 +220,14 @@ func SystemStatCollectIntervalMs() uint32 {
 	return globalCfg.SystemStatCollectIntervalMs()
 }
 
+func LoadStatCollectIntervalMs() uint32 {
+	return globalCfg.LoadStatCollectIntervalMs()
+}
+
+func CpuStatCollectIntervalMs() uint32 {
+	return globalCfg.CpuStatCollectIntervalMs()
+}
+
 func MemoryStatCollectIntervalMs() uint32 {
 	return globalCfg.MemoryStatCollectIntervalMs()
 }

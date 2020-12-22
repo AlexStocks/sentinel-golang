@@ -83,6 +83,8 @@ type StatConfig struct {
 type SystemStatConfig struct {
 	// CollectIntervalMs represents the collecting interval of the system metrics collector.
 	CollectIntervalMs       uint32 `yaml:"collectIntervalMs"`
+	CollectLoadIntervalMs   uint32 `yaml:"collectLoadIntervalMs"`
+	CollectCpuIntervalMs    uint32 `yaml:"collectCpuIntervalMs"`
 	CollectMemoryIntervalMs uint32 `yaml:"collectMemoryIntervalMs"`
 }
 
@@ -115,6 +117,8 @@ func NewDefaultConfig() *Entity {
 				MetricStatisticIntervalMs:       base.DefaultIntervalMs,
 				System: SystemStatConfig{
 					CollectIntervalMs:       DefaultSystemStatCollectIntervalMs,
+					CollectLoadIntervalMs:   DefaultLoadStatCollectIntervalMs,
+					CollectCpuIntervalMs:    DefaultCpuStatCollectIntervalMs,
 					CollectMemoryIntervalMs: DefaultMemoryStatCollectIntervalMs,
 				},
 			},
@@ -197,6 +201,14 @@ func (entity *Entity) MetricLogMaxFileAmount() uint32 {
 
 func (entity *Entity) SystemStatCollectIntervalMs() uint32 {
 	return entity.Sentinel.Stat.System.CollectIntervalMs
+}
+
+func (entity *Entity) LoadStatCollectIntervalMs() uint32 {
+	return entity.Sentinel.Stat.System.CollectLoadIntervalMs
+}
+
+func (entity *Entity) CpuStatCollectIntervalMs() uint32 {
+	return entity.Sentinel.Stat.System.CollectCpuIntervalMs
 }
 
 func (entity *Entity) MemoryStatCollectIntervalMs() uint32 {

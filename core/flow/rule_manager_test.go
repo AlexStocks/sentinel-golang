@@ -458,56 +458,46 @@ func TestLoadRules(t *testing.T) {
 }
 
 func TestIsValidRule(t *testing.T) {
-	rule1 := Rule{
-		ID:                     "",
+	rule1 := &Rule{
 		Resource:               "hello0",
-		TokenCalculateStrategy: 0,
-		ControlBehavior:        0,
+		TokenCalculateStrategy: Direct,
+		ControlBehavior:        Reject,
 		Threshold:              0,
-		RelationStrategy:       0,
+		RelationStrategy:       CurrentResource,
 		RefResource:            "",
 		MaxQueueingTimeMs:      0,
 		WarmUpPeriodSec:        0,
 		WarmUpColdFactor:       0,
-		StatIntervalInMs:       0,
-		AdaptiveEnable:         false,
-		AdaptiveType:           0,
+		StatIntervalInMs:       10,
 		SafeThreshold:          2,
 		RiskThreshold:          1,
 		LowWaterMark:           1,
 		HighWaterMark:          2,
 	}
 
-	assert.Nil(t, IsValidRule(&rule1))
-	rule1.AdaptiveEnable = true
-	rule1.LowWaterMark = 1
-	rule1.HighWaterMark = 2
+	assert.Nil(t, IsValidRule(rule1))
 
-	rule1.AdaptiveType = AdaptiveMax
-	assert.NotNil(t, IsValidRule(&rule1))
-	rule1.AdaptiveType = 0
-	assert.Nil(t, IsValidRule(&rule1))
-
+	rule1.TokenCalculateStrategy = AdaptiveMemory
 	rule1.SafeThreshold = 9
 	rule1.RiskThreshold = 9
-	assert.NotNil(t, IsValidRule(&rule1))
+	assert.NotNil(t, IsValidRule(rule1))
 	rule1.SafeThreshold = 10
-	assert.Nil(t, IsValidRule(&rule1))
+	assert.Nil(t, IsValidRule(rule1))
 
 	rule1.LowWaterMark = 0
-	assert.NotNil(t, IsValidRule(&rule1))
+	assert.NotNil(t, IsValidRule(rule1))
 	rule1.LowWaterMark = 100 * 1024 * 1024
 	rule1.HighWaterMark = 300 * 1024 * 1024
-	assert.Nil(t, IsValidRule(&rule1))
+	assert.Nil(t, IsValidRule(rule1))
 
 	rule1.HighWaterMark = 0
-	assert.NotNil(t, IsValidRule(&rule1))
+	assert.NotNil(t, IsValidRule(rule1))
 	rule1.HighWaterMark = 300 * 1024 * 1024
-	assert.Nil(t, IsValidRule(&rule1))
+	assert.Nil(t, IsValidRule(rule1))
 
 	rule1.LowWaterMark = 100 * 1024 * 1024
 	rule1.HighWaterMark = 30 * 1024 * 1024
-	assert.NotNil(t, IsValidRule(&rule1))
+	assert.NotNil(t, IsValidRule(rule1))
 	rule1.HighWaterMark = 300 * 1024 * 1024
-	assert.Nil(t, IsValidRule(&rule1))
+	assert.Nil(t, IsValidRule(rule1))
 }

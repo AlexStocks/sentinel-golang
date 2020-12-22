@@ -18,7 +18,6 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/alibaba/sentinel-golang/core/system_metric"
 	"github.com/alibaba/sentinel-golang/util"
 )
 
@@ -48,6 +47,7 @@ type TokenCalculateStrategy int32
 const (
 	Direct TokenCalculateStrategy = iota
 	WarmUp
+	AdaptiveMemory
 )
 
 func (s TokenCalculateStrategy) String() string {
@@ -56,6 +56,8 @@ func (s TokenCalculateStrategy) String() string {
 		return "Direct"
 	case WarmUp:
 		return "WarmUp"
+	case AdaptiveMemory:
+		return "AdaptiveMemory"
 	default:
 		return "Undefined"
 	}
@@ -77,33 +79,6 @@ func (s ControlBehavior) String() string {
 	default:
 		return "Undefined"
 	}
-}
-
-type AdaptiveType uint32
-
-const (
-	// Load represents system load1 in Linux/Unix.
-	MetricDefault = AdaptiveType(0)
-	CPU           = AdaptiveType(1)
-	Memory        = AdaptiveType(2)
-	AdaptiveMax   = AdaptiveType(3)
-)
-
-func (t AdaptiveType) String() string {
-	switch t {
-	case MetricDefault:
-		return "default"
-	case CPU:
-		return "cpu"
-	case Memory:
-		return "memory"
-	default:
-		return fmt.Sprintf("unknown(%d)", t)
-	}
-}
-
-func (t AdaptiveType) Validate() bool {
-	return t < AdaptiveMax
 }
 
 // Rule describes the strategy of flow control, the flow control strategy is based on QPS statistic metric
@@ -131,23 +106,12 @@ type Rule struct {
 	// 		sentinel will generate independent statistic structure for this rule.
 	StatIntervalInMs uint32 `json:"statIntervalInMs"`
 
-	// adaptive flow control alg
-	//
-	// If AdaptiveEnable is true, flow rule's threshold is calculated by FlowRule.GetThreshold()
-	// instead of FlowRule.Threshold. Sentinel gets the metric watermark based on Rule.AdaptiveType
-	// which maybe cpu or memory. And then Sentinel will calculate the real threshold.
-	//
-	// Alg:
-	// If the watermark is less than Rule.LowWaterMark, the threshold is equal to Rule.SafeThreshold.
-	// If the watermark is greater than Rule.LowWaterMark, the threshold is equal to Rule.SafeThreshold.
-	// Otherwise, the threshold is equal to (watermark - LowWaterMark) / (HighWaterMark - LowWaterMark)) *
-	//	(RiskThreshold - SafeThreshold) + SafeThreshold.
-	AdaptiveEnable bool         `json:"adaptiveEnable"`
-	AdaptiveType   AdaptiveType `json:"adaptiveType"`
-	SafeThreshold  uint64       `json:"safeThreshold"`
-	RiskThreshold  uint64       `json:"riskThreshold"`
-	LowWaterMark   uint64       `json:"lowWatermark"`
-	HighWaterMark  uint64       `json:"highWatermark"`
+	// adaptive flow control algorithm related parameters
+	// limitation: SafeThreshold > RiskThreshold && HighWaterMark > LowWaterMark
+	SafeThreshold int64 `json:"safeThreshold"`
+	RiskThreshold int64 `json:"riskThreshold"`
+	LowWaterMark  int64 `json:"lowWatermark"`
+	HighWaterMark int64 `json:"highWatermark"`
 }
 
 func (r *Rule) isEqualsTo(newRule *Rule) bool {
@@ -163,7 +127,6 @@ func (r *Rule) isEqualsTo(newRule *Rule) bool {
 		r.MaxQueueingTimeMs == newRule.MaxQueueingTimeMs && r.WarmUpPeriodSec == newRule.WarmUpPeriodSec &&
 		r.WarmUpColdFactor == newRule.WarmUpColdFactor &&
 
-		r.AdaptiveEnable == newRule.AdaptiveEnable && r.AdaptiveType == newRule.AdaptiveType &&
 		r.SafeThreshold == newRule.SafeThreshold && r.RiskThreshold == newRule.RiskThreshold &&
 		r.LowWaterMark == newRule.LowWaterMark && r.HighWaterMark == newRule.HighWaterMark) {
 
@@ -171,27 +134,6 @@ func (r *Rule) isEqualsTo(newRule *Rule) bool {
 	}
 
 	return true
-}
-
-// GetThreshold gets the real flow threshold.
-func (r *Rule) GetThreshold() float64 {
-	threshold := r.Threshold
-
-	if r.AdaptiveEnable {
-		if r.AdaptiveType == Memory {
-			m := uint64(system_metric.CurrentMemoryUsage())
-			if m <= r.LowWaterMark {
-				threshold = float64(r.SafeThreshold)
-			} else if m >= r.HighWaterMark {
-				threshold = float64(r.RiskThreshold)
-			} else {
-				threshold = ((float64(m-r.LowWaterMark))/(float64(r.HighWaterMark-r.LowWaterMark)))*
-					(float64(r.SafeThreshold-r.RiskThreshold)) + float64(r.RiskThreshold)
-			}
-		}
-	}
-
-	return threshold
 }
 
 func (r *Rule) isStatReusable(newRule *Rule) bool {
@@ -204,7 +146,7 @@ func (r *Rule) isStatReusable(newRule *Rule) bool {
 }
 
 func (r *Rule) needStatistic() bool {
-	return !(r.TokenCalculateStrategy == Direct && r.ControlBehavior == Throttling)
+	return !((r.TokenCalculateStrategy == Direct && r.ControlBehavior == Throttling) || (r.TokenCalculateStrategy == AdaptiveMemory && r.ControlBehavior == Throttling))
 }
 
 func (r *Rule) String() string {
@@ -213,10 +155,10 @@ func (r *Rule) String() string {
 		// Return the fallback string
 		return fmt.Sprintf("Rule{Resource=%s, TokenCalculateStrategy=%s, ControlBehavior=%s, "+
 			"Threshold=%.2f, RelationStrategy=%s, RefResource=%s, MaxQueueingTimeMs=%d, WarmUpPeriodSec=%d, WarmUpColdFactor=%d, StatIntervalInMs=%d, "+
-			"AdaptiveEnable=%v, AdaptiveType=%s, SafeThreshold=%v, RiskThreshold=%v, LowWaterMark=%v, HighWaterMark=%v}",
+			"SafeThreshold=%v, RiskThreshold=%v, LowWaterMark=%v, HighWaterMark=%v}",
 			r.Resource, r.TokenCalculateStrategy, r.ControlBehavior, r.Threshold, r.RelationStrategy, r.RefResource,
 			r.MaxQueueingTimeMs, r.WarmUpPeriodSec, r.WarmUpColdFactor, r.StatIntervalInMs,
-			r.AdaptiveEnable, r.AdaptiveType, r.SafeThreshold, r.RiskThreshold, r.LowWaterMark, r.HighWaterMark)
+			r.SafeThreshold, r.RiskThreshold, r.LowWaterMark, r.HighWaterMark)
 	}
 	return string(b)
 }
