@@ -7,14 +7,12 @@ import (
 
 	"github.com/alibaba/sentinel-golang/api"
 	"github.com/alibaba/sentinel-golang/core/base"
-	"github.com/alibaba/sentinel-golang/core/config"
 	"github.com/alibaba/sentinel-golang/core/flow"
 	"github.com/alibaba/sentinel-golang/core/system_metric"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestAdaptiveFlowControl(t *testing.T) {
-	debug.SetGCPercent(-1)
 	if err := api.InitDefault(); err != nil {
 		t.Error(err)
 	}
@@ -63,7 +61,7 @@ func TestAdaptiveFlowControl(t *testing.T) {
 	rule2 := rule
 	rule2.TokenCalculateStrategy = flow.AdaptiveMemory
 	rule2.SafeThreshold = 10
-	rule2.RiskThreshold = 1
+	rule2.RiskThreshold = 3
 	rule2.LowWaterMark = memSize + 300*1024
 	rule2.HighWaterMark = memSize + 800*1024
 	ok, err = flow.LoadRules([]*flow.Rule{&rule2})
@@ -74,23 +72,14 @@ func TestAdaptiveFlowControl(t *testing.T) {
 	entry.Exit()
 
 	// + 80k
-	num = 10 * 1024
-	arr := make([]int32, num)
-	for i := 0; i < num; i++ {
-		arr[i] = int32(i)
-	}
-	time.Sleep(time.Duration((config.DefaultMemoryStatCollectIntervalMs + 10) * 1e6))
+	system_metric.SetSystemMemoryUsage(memSize + 80*1024)
 	entry, blockError = api.Entry(rs, api.WithTrafficType(base.Inbound))
 	assert.Nil(t, blockError)
 	entry.Exit()
 
 	// + 400k
-	num = 100 * 1024
-	arr = make([]int32, num)
-	for i := 0; i < num; i++ {
-		arr[i] = int32(i)
-	}
-	time.Sleep(time.Duration((config.DefaultMemoryStatCollectIntervalMs + 10) * 1e6))
+	time.Sleep(1.2e9)
+	system_metric.SetSystemMemoryUsage(memSize + 400*1024)
 	for i := 0; i < int(rule2.SafeThreshold); i++ {
 		entry, blockError = api.Entry(rs, api.WithTrafficType(base.Inbound))
 		if blockError == nil {
@@ -101,12 +90,8 @@ func TestAdaptiveFlowControl(t *testing.T) {
 	assert.NotNil(t, blockError)
 
 	// + 1MB
-	num = 256 * 1024
-	arr = make([]int32, num)
-	for i := 0; i < num; i++ {
-		arr[i] = int32(i)
-	}
-	time.Sleep(1.4e9)
+	time.Sleep(1.2e9)
+	system_metric.SetSystemMemoryUsage(memSize + 1024*1024)
 	for i := 0; i < int(rule2.RiskThreshold); i++ {
 		entry, blockError = api.Entry(rs, api.WithTrafficType(base.Inbound))
 		assert.Nil(t, blockError)
@@ -130,7 +115,7 @@ func TestAdaptiveFlowControl2(t *testing.T) {
 		Threshold:     2000,
 		SafeThreshold: 150,
 		RiskThreshold: 10,
-		LowWaterMark:  128849018880,
+		LowWaterMark:  100998840320,
 		HighWaterMark: 268435456000,
 	}
 
@@ -141,7 +126,7 @@ func TestAdaptiveFlowControl2(t *testing.T) {
 	ok, err := flow.LoadRules([]*flow.Rule{&rule1})
 	assert.True(t, ok)
 	assert.Nil(t, err)
-	system_metric.SetSystemMemoryUsage(260698324992)
+	system_metric.SetSystemMemoryUsage(136794800128)
 	_, blockError := api.Entry(rs, api.WithTrafficType(base.Inbound))
 	assert.Nil(t, blockError)
 }
