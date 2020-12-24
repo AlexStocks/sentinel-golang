@@ -520,6 +520,9 @@ func IsValidRule(rule *Rule) error {
 	if rule.Resource == "" {
 		return errors.New("empty Resource")
 	}
+	if rule.DebugMode {
+		return nil
+	}
 	if rule.Threshold < 0 {
 		return errors.New("negative Threshold")
 	}

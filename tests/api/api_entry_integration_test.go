@@ -115,3 +115,33 @@ func TestAdaptiveFlowControl(t *testing.T) {
 	_, blockError = api.Entry(rs, api.WithTrafficType(base.Inbound))
 	assert.NotNil(t, blockError)
 }
+
+func TestAdaptiveFlowControl2(t *testing.T) {
+	debug.SetGCPercent(-1)
+
+	if err := api.InitDefault(); err != nil {
+		t.Error(err)
+	}
+
+	rs := "hello0"
+	rule := flow.Rule{
+		ID:            "",
+		Resource:      rs,
+		Threshold:     2000,
+		SafeThreshold: 150,
+		RiskThreshold: 10,
+		LowWaterMark:  128849018880,
+		HighWaterMark: 268435456000,
+	}
+
+	t.Log("start to test flow control")
+	rule1 := rule
+	rule1.DebugMode = true
+	rule1.TokenCalculateStrategy = flow.AdaptiveMemory
+	ok, err := flow.LoadRules([]*flow.Rule{&rule1})
+	assert.True(t, ok)
+	assert.Nil(t, err)
+	system_metric.SetSystemMemoryUsage(260698324992)
+	_, blockError := api.Entry(rs, api.WithTrafficType(base.Inbound))
+	assert.Nil(t, blockError)
+}

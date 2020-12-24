@@ -8,7 +8,7 @@ import "github.com/alibaba/sentinel-golang/core/system_metric"
 // If the watermark is less than Rule.LowWaterMark, the threshold is Rule.SafeThreshold.
 // If the watermark is greater than Rule.HighWaterMark, the threshold is Rule.RiskThreshold.
 // Otherwise, the threshold is ((watermark - LowWaterMark)/(HighWaterMark - LowWaterMark)) *
-//	(SafeThreshold - RiskThreshold) + RiskThreshold.
+//	(RiskThreshold - SafeThreshold) + SafeThreshold.
 type MemoryAdaptiveTrafficShapingCalculator struct {
 	owner         *TrafficShapingController
 	safeThreshold int64
@@ -39,8 +39,7 @@ func (m *MemoryAdaptiveTrafficShapingCalculator) CalculateAllowedTokens(_ uint32
 	} else if mem >= m.highWaterMark {
 		threshold = float64(m.riskThreshold)
 	} else {
-		threshold = float64(mem-m.lowWaterMark)/float64(m.highWaterMark-m.lowWaterMark)*
-			float64(m.safeThreshold-m.riskThreshold) + float64(m.riskThreshold)
+		threshold = (float64(m.riskThreshold-m.safeThreshold)/float64(m.highWaterMark-m.lowWaterMark))*float64(mem-m.lowWaterMark) + float64(m.safeThreshold)
 	}
 	return threshold
 }
