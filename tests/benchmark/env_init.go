@@ -30,6 +30,8 @@ func InitSentinel() {
 	conf.Sentinel.Log.Metric.FlushIntervalSec = 0
 	conf.Sentinel.Stat.System.CollectIntervalMs = 0
 	conf.Sentinel.Stat.System.CollectMemoryIntervalMs = 0
+	conf.Sentinel.Stat.System.CollectCpuIntervalMs = 0
+	conf.Sentinel.Stat.System.CollectLoadIntervalMs = 0
 	err := sentinel.InitWithConfig(conf)
 	if err != nil {
 		log.Fatal(err)

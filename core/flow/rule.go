@@ -47,7 +47,7 @@ type TokenCalculateStrategy int32
 const (
 	Direct TokenCalculateStrategy = iota
 	WarmUp
-	AdaptiveMemory
+	MemoryAdaptive
 )
 
 func (s TokenCalculateStrategy) String() string {
@@ -56,8 +56,8 @@ func (s TokenCalculateStrategy) String() string {
 		return "Direct"
 	case WarmUp:
 		return "WarmUp"
-	case AdaptiveMemory:
-		return "AdaptiveMemory"
+	case MemoryAdaptive:
+		return "MemoryAdaptive"
 	default:
 		return "Undefined"
 	}
@@ -83,7 +83,6 @@ func (s ControlBehavior) String() string {
 
 // Rule describes the strategy of flow control, the flow control strategy is based on QPS statistic metric
 type Rule struct {
-	DebugMode bool
 	// ID represents the unique ID of the rule (optional).
 	ID string `json:"id,omitempty"`
 	// Resource represents the resource name.
@@ -109,6 +108,9 @@ type Rule struct {
 
 	// adaptive flow control algorithm related parameters
 	// limitation: SafeThreshold > RiskThreshold && HighWaterMark > LowWaterMark
+	// if the current memory usage is less than or equals to LowWaterMark, threshold == SafeThreshold
+	// if the current memory usage is more than or equals to HighWaterMark, threshold == RiskThreshold
+	// if  the current memory usage is in (LowWaterMark, HighWaterMark), threshold is in (RiskThreshold, SafeThreshold)
 	SafeThreshold int64 `json:"safeThreshold"`
 	RiskThreshold int64 `json:"riskThreshold"`
 	LowWaterMark  int64 `json:"lowWatermark"`
@@ -133,7 +135,6 @@ func (r *Rule) isEqualsTo(newRule *Rule) bool {
 
 		return false
 	}
-
 	return true
 }
 
@@ -147,7 +148,7 @@ func (r *Rule) isStatReusable(newRule *Rule) bool {
 }
 
 func (r *Rule) needStatistic() bool {
-	return !((r.TokenCalculateStrategy == Direct && r.ControlBehavior == Throttling) || (r.TokenCalculateStrategy == AdaptiveMemory && r.ControlBehavior == Throttling))
+	return !((r.TokenCalculateStrategy == Direct && r.ControlBehavior == Throttling) || (r.TokenCalculateStrategy == MemoryAdaptive && r.ControlBehavior == Throttling))
 }
 
 func (r *Rule) String() string {

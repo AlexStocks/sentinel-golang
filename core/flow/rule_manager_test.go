@@ -460,24 +460,16 @@ func TestLoadRules(t *testing.T) {
 func TestIsValidRule(t *testing.T) {
 	rule1 := &Rule{
 		Resource:               "hello0",
-		TokenCalculateStrategy: Direct,
+		TokenCalculateStrategy: MemoryAdaptive,
 		ControlBehavior:        Reject,
-		Threshold:              0,
-		RelationStrategy:       CurrentResource,
-		RefResource:            "",
-		MaxQueueingTimeMs:      0,
-		WarmUpPeriodSec:        0,
-		WarmUpColdFactor:       0,
 		StatIntervalInMs:       10,
 		SafeThreshold:          2,
 		RiskThreshold:          1,
 		LowWaterMark:           1,
 		HighWaterMark:          2,
 	}
-
 	assert.Nil(t, IsValidRule(rule1))
 
-	rule1.TokenCalculateStrategy = AdaptiveMemory
 	rule1.SafeThreshold = 9
 	rule1.RiskThreshold = 9
 	assert.NotNil(t, IsValidRule(rule1))

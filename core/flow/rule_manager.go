@@ -127,7 +127,7 @@ func init() {
 		return tsc, nil
 	}
 	tcGenFuncMap[trafficControllerGenKey{
-		tokenCalculateStrategy: AdaptiveMemory,
+		tokenCalculateStrategy: MemoryAdaptive,
 		controlBehavior:        Reject,
 	}] = func(rule *Rule, boundStat *standaloneStatistic) (*TrafficShapingController, error) {
 		if boundStat == nil {
@@ -146,10 +146,10 @@ func init() {
 		return tsc, nil
 	}
 	tcGenFuncMap[trafficControllerGenKey{
-		tokenCalculateStrategy: AdaptiveMemory,
+		tokenCalculateStrategy: MemoryAdaptive,
 		controlBehavior:        Throttling,
 	}] = func(rule *Rule, _ *standaloneStatistic) (*TrafficShapingController, error) {
-		// AdaptiveMemory token calculate strategy and throttling control behavior don't use stat, so we just give a nop stat.
+		// MemoryAdaptive token calculate strategy and throttling control behavior don't use stat, so we just give a nop stat.
 		tsc, err := NewTrafficShapingController(rule, nopStat)
 		if err != nil || tsc == nil {
 			return nil, err
@@ -520,9 +520,6 @@ func IsValidRule(rule *Rule) error {
 	if rule.Resource == "" {
 		return errors.New("empty Resource")
 	}
-	if rule.DebugMode {
-		return nil
-	}
 	if rule.Threshold < 0 {
 		return errors.New("negative Threshold")
 	}
@@ -549,7 +546,7 @@ func IsValidRule(rule *Rule) error {
 	if rule.StatIntervalInMs > 10*60*1000 {
 		logging.Info("StatIntervalInMs is great than 10 minutes, less than 10 minutes is recommended.")
 	}
-	if rule.TokenCalculateStrategy == AdaptiveMemory {
+	if rule.TokenCalculateStrategy == MemoryAdaptive {
 		if rule.SafeThreshold <= 0 {
 			return errors.New("rule.SafeThreshold <= 0")
 		}
@@ -557,7 +554,7 @@ func IsValidRule(rule *Rule) error {
 			return errors.New("rule.RiskThreshold <= 0")
 		}
 		if rule.RiskThreshold >= rule.SafeThreshold {
-			return errors.New("rule.RiskThreshold should be less than rule.SafeThreshold")
+			return errors.New("rule.RiskThreshold >= rule.SafeThreshold")
 		}
 
 		if rule.LowWaterMark <= 0 {
@@ -571,7 +568,7 @@ func IsValidRule(rule *Rule) error {
 		}
 		if rule.LowWaterMark >= rule.HighWaterMark {
 			// can not be equal to defeat from zero overflow
-			return errors.New("rule.LowWaterMark should be less than rule.HighWaterMark")
+			return errors.New("rule.LowWaterMark >= rule.HighWaterMark")
 		}
 	}
 

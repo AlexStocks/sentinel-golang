@@ -39,12 +39,14 @@ var (
 	currentCpuUsage    atomic.Value
 	currentMemoryUsage atomic.Value
 
-	loadStatOnce   sync.Once
-	memoryStatOnce sync.Once
-	cpuStatOnce    sync.Once
+	loadStatCollectorOnce   sync.Once
+	memoryStatCollectorOnce sync.Once
+	cpuStatCollectorOnce    sync.Once
 
-	CurrentPID      = os.Getpid()
-	TotalMemorySize = getTotalMemorySize()
+	CurrentPID         = os.Getpid()
+	currentProcess     atomic.Value
+	currentProcessOnce sync.Once
+	TotalMemorySize    = getTotalMemorySize()
 
 	ssStopChan = make(chan struct{})
 )
@@ -53,6 +55,14 @@ func init() {
 	currentLoad.Store(NotRetrievedLoadValue)
 	currentCpuUsage.Store(NotRetrievedCpuUsageValue)
 	currentMemoryUsage.Store(NotRetrievedMemoryValue)
+
+	p, err := process.NewProcess(int32(CurrentPID))
+	if err != nil {
+		logging.Error(err, "Fail to new process when initializing system metric", "pid", CurrentPID)
+	}
+	currentProcessOnce.Do(func() {
+		currentProcess.Store(p)
+	})
 }
 
 // getMemoryStat returns the current machine's memory statistic
@@ -68,7 +78,7 @@ func InitMemoryCollector(intervalMs uint32) {
 	if intervalMs == 0 {
 		return
 	}
-	memoryStatOnce.Do(func() {
+	memoryStatCollectorOnce.Do(func() {
 		// Initial memory retrieval.
 		retrieveAndUpdateMemoryStat()
 
@@ -97,11 +107,18 @@ func retrieveAndUpdateMemoryStat() {
 
 // GetProcessMemoryStat gets current process's memory usage in Bytes
 func GetProcessMemoryStat() (int64, error) {
-	p, err := process.NewProcess(int32(CurrentPID))
-	if err != nil {
-		return 0, err
+	curProcess := currentProcess.Load()
+	if curProcess == nil {
+		p, err := process.NewProcess(int32(CurrentPID))
+		if err != nil {
+			return 0, err
+		}
+		currentProcessOnce.Do(func() {
+			currentProcess.Store(p)
+		})
+		curProcess = currentProcess.Load()
 	}
-
+	p := curProcess.(*process.Process)
 	memInfo, err := p.MemoryInfo()
 	var rss int64
 	if memInfo != nil {
@@ -115,7 +132,7 @@ func InitCpuCollector(intervalMs uint32) {
 	if intervalMs == 0 {
 		return
 	}
-	cpuStatOnce.Do(func() {
+	cpuStatCollectorOnce.Do(func() {
 		// Initial memory retrieval.
 		retrieveAndUpdateCpuStat()
 
@@ -135,27 +152,35 @@ func InitCpuCollector(intervalMs uint32) {
 }
 
 func retrieveAndUpdateCpuStat() {
-	cpuPercent, err := GetProcessCpuStat()
+	cpuPercent, err := getProcessCpuStat()
 	if err == nil {
 		metrics.SetCPURatio(cpuPercent)
 		currentCpuUsage.Store(cpuPercent)
 	}
 }
 
-// GetProcessMemoryStat gets current process's memory usage in Bytes
-func GetProcessCpuStat() (float64, error) {
-	p, err := process.NewProcess(int32(CurrentPID))
-	if err != nil {
-		return 0, err
+// getProcessCpuStat gets current process's memory usage in Bytes
+func getProcessCpuStat() (float64, error) {
+	curProcess := currentProcess.Load()
+	if curProcess == nil {
+		p, err := process.NewProcess(int32(CurrentPID))
+		if err != nil {
+			return 0, err
+		}
+		currentProcessOnce.Do(func() {
+			currentProcess.Store(p)
+		})
+		curProcess = currentProcess.Load()
 	}
-	return p.CPUPercent()
+	p := curProcess.(*process.Process)
+	return p.Percent(0)
 }
 
 func InitLoadCollector(intervalMs uint32) {
 	if intervalMs == 0 {
 		return
 	}
-	loadStatOnce.Do(func() {
+	loadStatCollectorOnce.Do(func() {
 		// Initial retrieval.
 		retrieveAndUpdateLoadStat()
 

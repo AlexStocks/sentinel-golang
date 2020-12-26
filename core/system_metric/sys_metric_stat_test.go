@@ -15,7 +15,9 @@
 package system_metric
 
 import (
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/alibaba/sentinel-golang/util"
 	"github.com/stretchr/testify/assert"
@@ -43,4 +45,41 @@ func TestCurrentCpuUsage(t *testing.T) {
 	currentCpuUsage.Store(v)
 	cpuUsage = CurrentCpuUsage()
 	assert.True(t, util.Float64Equals(v, cpuUsage))
+}
+
+func Test_getProcessCpuStat(t *testing.T) {
+	wg := &sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		i := 0
+		wg.Done()
+		for i < 10000000000 {
+			i++
+			if i == 1000000000 {
+				i = 0
+			}
+		}
+	}()
+	wg.Wait()
+
+	got, err := getProcessCpuStat()
+	if err != nil {
+		t.Error(err)
+	}
+	assert.True(t, int(got) == 0)
+	time.Sleep(time.Millisecond * 200)
+
+	got, err = getProcessCpuStat()
+	if err != nil {
+		t.Error(err)
+	}
+	assert.True(t, int(got) > 0)
+	time.Sleep(time.Millisecond * 200)
+
+	got, err = getProcessCpuStat()
+	if err != nil {
+		t.Error(err)
+	}
+	assert.True(t, int(got) > 0)
+	time.Sleep(time.Millisecond * 200)
 }
