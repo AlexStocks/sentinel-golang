@@ -49,11 +49,11 @@ func main() {
 			TokenCalculateStrategy: flow.MemoryAdaptive,
 			ControlBehavior:        flow.Reject,
 			StatIntervalInMs:       1000,
-			SafeThreshold:          1000,
-			RiskThreshold:          100,
+			LowMemUsageThreshold:   1000,
+			HighMemUsageThreshold:  100,
 			// bytes
-			LowWaterMark:  1024,
-			HighWaterMark: 2048,
+			MemLowWaterMarkBytes:  1024,
+			MemHighWaterMarkBytes: 2048,
 		},
 	})
 	if err != nil {

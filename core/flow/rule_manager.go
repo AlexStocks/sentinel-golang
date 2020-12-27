@@ -547,28 +547,28 @@ func IsValidRule(rule *Rule) error {
 		logging.Info("StatIntervalInMs is great than 10 minutes, less than 10 minutes is recommended.")
 	}
 	if rule.TokenCalculateStrategy == MemoryAdaptive {
-		if rule.SafeThreshold <= 0 {
-			return errors.New("rule.SafeThreshold <= 0")
+		if rule.LowMemUsageThreshold <= 0 {
+			return errors.New("rule.LowMemUsageThreshold <= 0")
 		}
-		if rule.RiskThreshold <= 0 {
-			return errors.New("rule.RiskThreshold <= 0")
+		if rule.HighMemUsageThreshold <= 0 {
+			return errors.New("rule.HighMemUsageThreshold <= 0")
 		}
-		if rule.RiskThreshold >= rule.SafeThreshold {
-			return errors.New("rule.RiskThreshold >= rule.SafeThreshold")
+		if rule.HighMemUsageThreshold >= rule.LowMemUsageThreshold {
+			return errors.New("rule.HighMemUsageThreshold >= rule.LowMemUsageThreshold")
 		}
 
-		if rule.LowWaterMark <= 0 {
-			return errors.New("rule.LowWaterMark <= 0")
+		if rule.MemLowWaterMarkBytes <= 0 {
+			return errors.New("rule.MemLowWaterMarkBytes <= 0")
 		}
-		if rule.HighWaterMark <= 0 {
-			return errors.New("rule.HighWaterMark <= 0")
+		if rule.MemHighWaterMarkBytes <= 0 {
+			return errors.New("rule.MemHighWaterMarkBytes <= 0")
 		}
-		if rule.HighWaterMark > int64(system_metric.TotalMemorySize) {
-			return errors.New("rule.HighWaterMark should not be greater than current system's total memory size")
+		if rule.MemHighWaterMarkBytes > int64(system_metric.TotalMemorySize) {
+			return errors.New("rule.MemHighWaterMarkBytes should not be greater than current system's total memory size")
 		}
-		if rule.LowWaterMark >= rule.HighWaterMark {
+		if rule.MemLowWaterMarkBytes >= rule.MemHighWaterMarkBytes {
 			// can not be equal to defeat from zero overflow
-			return errors.New("rule.LowWaterMark >= rule.HighWaterMark")
+			return errors.New("rule.MemLowWaterMarkBytes >= rule.MemHighWaterMarkBytes")
 		}
 	}
 

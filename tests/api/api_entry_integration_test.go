@@ -12,6 +12,7 @@ import (
 	"github.com/alibaba/sentinel-golang/core/flow"
 	"github.com/alibaba/sentinel-golang/core/system_metric"
 	"github.com/alibaba/sentinel-golang/logging"
+	"github.com/alibaba/sentinel-golang/util"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -33,6 +34,7 @@ func initSentinel() {
 
 func TestAdaptiveFlowControl(t *testing.T) {
 	initSentinel()
+	util.SetClock(util.NewMockClock())
 
 	rs := "hello0"
 	rule := flow.Rule{
@@ -40,17 +42,17 @@ func TestAdaptiveFlowControl(t *testing.T) {
 		TokenCalculateStrategy: flow.MemoryAdaptive,
 		ControlBehavior:        flow.Reject,
 		StatIntervalInMs:       1000,
-		SafeThreshold:          5,
-		RiskThreshold:          1,
-		LowWaterMark:           1 * 1024,
-		HighWaterMark:          2 * 1024,
+		LowMemUsageThreshold:   5,
+		HighMemUsageThreshold:  1,
+		MemLowWaterMarkBytes:   1 * 1024,
+		MemHighWaterMarkBytes:  2 * 1024,
 	}
 	rule1 := rule
 	ok, err := flow.LoadRules([]*flow.Rule{&rule1})
 	assert.True(t, ok)
 	assert.Nil(t, err)
 
-	// mock memory usage < LowWaterMark, QPS threshold is 2
+	// mock memory usage < MemLowWaterMarkBytes, QPS threshold is 2
 	system_metric.SetSystemMemoryUsage(512)
 	for i := 0; i < 5; i++ {
 		entry, blockError := api.Entry(rs, api.WithTrafficType(base.Inbound))
@@ -67,7 +69,7 @@ func TestAdaptiveFlowControl(t *testing.T) {
 	}
 
 	// clear statistic
-	time.Sleep(time.Second * 2)
+	util.Sleep(time.Second * 2)
 	// QPS threshold is 3
 	system_metric.SetSystemMemoryUsage(1536)
 	for i := 0; i < 3; i++ {
@@ -85,7 +87,7 @@ func TestAdaptiveFlowControl(t *testing.T) {
 	}
 
 	// clear statistic
-	time.Sleep(time.Second * 2)
+	util.Sleep(time.Second * 2)
 	t.Log("start to test memory based adaptive flow control")
 	// QPS threshold is 3
 	system_metric.SetSystemMemoryUsage(2049)
@@ -113,10 +115,10 @@ func TestAdaptiveFlowControl2(t *testing.T) {
 		TokenCalculateStrategy: flow.MemoryAdaptive,
 		ControlBehavior:        flow.Reject,
 		StatIntervalInMs:       1000,
-		SafeThreshold:          150,
-		RiskThreshold:          10,
-		LowWaterMark:           100998840320,
-		HighWaterMark:          268435456000,
+		LowMemUsageThreshold:   150,
+		HighMemUsageThreshold:  10,
+		MemLowWaterMarkBytes:   100998840320,
+		MemHighWaterMarkBytes:  268435456000,
 	}
 	ok, err := flow.LoadRules([]*flow.Rule{&rule})
 	assert.True(t, ok)

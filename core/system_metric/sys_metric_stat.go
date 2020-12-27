@@ -59,6 +59,7 @@ func init() {
 	p, err := process.NewProcess(int32(CurrentPID))
 	if err != nil {
 		logging.Error(err, "Fail to new process when initializing system metric", "pid", CurrentPID)
+		return
 	}
 	currentProcessOnce.Do(func() {
 		currentProcess.Store(p)
@@ -69,6 +70,7 @@ func init() {
 func getTotalMemorySize() (total uint64) {
 	stat, err := mem.VirtualMemory()
 	if err != nil {
+		logging.Error(err, "Fail to read Virtual Memory")
 		return 0
 	}
 	return stat.Total
@@ -82,11 +84,11 @@ func InitMemoryCollector(intervalMs uint32) {
 		// Initial memory retrieval.
 		retrieveAndUpdateMemoryStat()
 
-		ticker := time.NewTicker(time.Duration(intervalMs) * time.Millisecond)
+		ticker := util.NewTicker(time.Duration(intervalMs) * time.Millisecond)
 		go util.RunWithRecover(func() {
 			for {
 				select {
-				case <-ticker.C:
+				case <-ticker.C():
 					retrieveAndUpdateMemoryStat()
 				case <-ssStopChan:
 					ticker.Stop()
@@ -99,10 +101,12 @@ func InitMemoryCollector(intervalMs uint32) {
 
 func retrieveAndUpdateMemoryStat() {
 	memoryUsedBytes, err := GetProcessMemoryStat()
-	if err == nil {
-		metrics.SetProcessMemorySize(memoryUsedBytes)
-		currentMemoryUsage.Store(memoryUsedBytes)
+	if err != nil {
+		logging.Error(err, "Fail to retrieve and update cpu statistic")
+		return
 	}
+	metrics.SetProcessMemorySize(memoryUsedBytes)
+	currentMemoryUsage.Store(memoryUsedBytes)
 }
 
 // GetProcessMemoryStat gets current process's memory usage in Bytes
@@ -153,10 +157,12 @@ func InitCpuCollector(intervalMs uint32) {
 
 func retrieveAndUpdateCpuStat() {
 	cpuPercent, err := getProcessCpuStat()
-	if err == nil {
-		metrics.SetCPURatio(cpuPercent)
-		currentCpuUsage.Store(cpuPercent)
+	if err != nil {
+		logging.Error(err, "Fail to retrieve and update cpu statistic")
+		return
 	}
+	metrics.SetCPURatio(cpuPercent)
+	currentCpuUsage.Store(cpuPercent)
 }
 
 // getProcessCpuStat gets current process's memory usage in Bytes
@@ -184,11 +190,11 @@ func InitLoadCollector(intervalMs uint32) {
 		// Initial retrieval.
 		retrieveAndUpdateLoadStat()
 
-		ticker := time.NewTicker(time.Duration(intervalMs) * time.Millisecond)
+		ticker := util.NewTicker(time.Duration(intervalMs) * time.Millisecond)
 		go util.RunWithRecover(func() {
 			for {
 				select {
-				case <-ticker.C:
+				case <-ticker.C():
 					retrieveAndUpdateLoadStat()
 				case <-ssStopChan:
 					ticker.Stop()
@@ -202,7 +208,7 @@ func InitLoadCollector(intervalMs uint32) {
 func retrieveAndUpdateLoadStat() {
 	loadStat, err := load.Avg()
 	if err != nil {
-		logging.Warn("[retrieveAndUpdateSystemStat] Failed to retrieve current system load", "err", err.Error())
+		logging.Error(err, "[retrieveAndUpdateSystemStat] Failed to retrieve current system load")
 		return
 	}
 	if loadStat != nil {
