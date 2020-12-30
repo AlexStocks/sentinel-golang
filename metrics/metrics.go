@@ -76,7 +76,7 @@ var (
 	}
 )
 
-// SetProcessMemorySize sets the # of current process's memory
+// SetCPURatio sets the # of current process's cpu ratio
 func SetCPURatio(ratio float64) {
 	CPURatio.WithLabelValues(hostName, psName, pidString, "process_cpu_ratio").Set(ratio)
 }
